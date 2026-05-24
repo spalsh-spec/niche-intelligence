@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Generated outputs (built by the app / CI)
+output/
+
+# Local secrets
+.env
+
+# Business docs live with the owner, never in the repo
+*.docx
+*.pdf
+PRD_*
+*MASTER*
+PLAYBOOK.md
+TEST_CASES.md
+
+# Build scratch
+node_modules/
+build_*.js
+*.jpg

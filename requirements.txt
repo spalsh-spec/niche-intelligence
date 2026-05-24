@@ -1,0 +1,7 @@
+# Core pipeline runs on the standard library alone (sample mode).
+# The two below unlock LIVE mode:
+requests>=2.31      # YouTube Data API v3 calls
+anthropic>=0.39     # Claude analysis + brief generation
+
+# Dev / test only:
+pytest>=7.4
