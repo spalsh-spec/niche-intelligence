@@ -123,7 +123,7 @@ h3{font-size:24px;letter-spacing:-.02em;margin:46px 0 6px;font-weight:600}
 border-radius:14px;padding:13px 15px;margin:14px 0;font-size:14px;color:#1a4480}
 .tip .i{flex:none;width:20px;height:20px;border-radius:50%;background:var(--blue);color:#fff;
 font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 18px}
 .kpi .n{font-size:32px;font-weight:600;letter-spacing:-.02em}
 .kpi .l{font-size:13px;color:var(--sub);margin-top:2px}
@@ -183,9 +183,6 @@ td.r,th.r{text-align:right}
       <p>Pick your lane. We score what's winning, prove which patterns actually
          hold up, and turn them into a brief in your voice.</p>
     </div>
-    <div class="tip"><span class="i">i</span><div><b>How to use this:</b> tap your
-      niche below. Everything — the winning content, the validated patterns, and the
-      brief generator — instantly retargets to it. Switch anytime from the top bar.</div></div>
     <div class="grid" id="nicheGrid"></div>
   </section>
 
@@ -194,42 +191,33 @@ td.r,th.r{text-align:right}
       <div class="em" id="nEmoji"></div>
       <h2 id="nTitle"></h2>
       <p id="nTagline"></p>
-      <div class="pills" id="nPills"></div>
     </div>
 
-    <h3>The numbers</h3>
     <div class="kpis" id="kpis"></div>
 
     <h3>What's winning</h3>
-    <p class="lede">Ranked by a fuzzy performance score that blends reach velocity
-       with real engagement — not raw views.</p>
     <div class="chartbox"><canvas id="perfChart"></canvas></div>
 
-    <h3>Why it's winning</h3>
-    <p class="lede">Only patterns that survived an active attempt to disprove them.</p>
-    <div class="tip"><span class="i">i</span><div><b>Optimize:</b> trust
-      <b>robustness</b>, not lift. A high-lift, low-robustness pattern is usually a
-      lucky coincidence. Chase the single highest on-brand survivor this week — one,
-      not five.</div></div>
+    <h3>Do more of this</h3>
+    <p class="lede">The patterns that held up. Pick one and run with it.</p>
     <div id="survivors"></div>
-    <div id="offbrand"></div>
 
     <h3>Your next video</h3>
-    <p class="lede">A brief grounded in the survivors, filtered through your brand.</p>
-    <div class="tip"><span class="i">i</span><div><b>Optimize:</b> aim for a brand
-      alignment of <b>0.8+</b>. If a red flag appears or the score drops below 0.5,
-      the topic is fighting your brand — reframe it before you film.</div></div>
     <div class="gen">
       <input id="topic" placeholder="Type a topic…">
-      <button class="btn" onclick="generate()">Generate brief</button>
+      <button class="btn" onclick="generate()">Generate</button>
     </div>
     <div class="chips" id="chips"></div>
     <div id="briefOut"></div>
+    <div class="tip"><span class="i">i</span><div>Aim for alignment
+      <b>0.8+</b>. A flag, or a score under 0.5, means the topic fights your
+      brand — reframe it before you film.</div></div>
 
     <details>
-      <summary>Falsification ledger — every hypothesis we tested</summary>
-      <table><thead><tr><th>Pattern</th><th>Verdict</th><th class="r">Robustness</th>
-        <th class="r">Lift</th><th class="r">Counter</th><th class="r">Contra</th></tr></thead>
+      <summary>Details — the numbers & full ledger</summary>
+      <div id="offbrand"></div>
+      <table><thead><tr><th>Pattern</th><th>Verdict</th><th class="r">Robust.</th>
+        <th class="r">Lift</th></tr></thead>
         <tbody id="ledgerRows"></tbody></table>
     </details>
   </section>
@@ -312,31 +300,26 @@ function openNiche(key){
   document.getElementById("nEmoji").textContent=m.emoji;
   document.getElementById("nTitle").textContent=m.label;
   document.getElementById("nTagline").textContent=m.tagline;
-  document.getElementById("nPills").innerHTML=m.pillars.map(p=>'<span class="pill">'+esc(p)+"</span>").join("");
   const top=d.topVideos[0]||{score:0};
   document.getElementById("kpis").innerHTML=[
-    [m.n_videos,"videos analyzed"],[m.n_survivors,"patterns survived"],
-    [m.n_claims,"hypotheses tested"],[Math.round(top.score),"top score"]
+    [m.n_survivors,"validated patterns"],[m.n_videos,"videos analyzed"],
+    [Math.round(top.score),"top score"]
   ].map(x=>'<div class="kpi"><div class="n">'+x[0]+'</div><div class="l">'+x[1]+"</div></div>").join("");
-  document.getElementById("survivors").innerHTML=d.survivors.length?d.survivors.map(c=>{
-    const tag=c.recommended?'<span class="tag on">ON-BRAND</span>':'<span class="tag off">OFF-BRAND</span>';
-    return '<div class="card"><div class="pat-head"><div class="pat-title">'+esc(c.statement)+"</div>"+tag+"</div>"+
-      '<div class="bar"><span style="width:'+Math.round(c.robustness*100)+'%"></span></div>'+
-      '<div class="meta">robustness '+c.robustness.toFixed(2)+" · lift "+c.lift.toFixed(2)+"× · support "+
-      c.support+"/"+c.population+" · "+c.counterexamples+" counterexamples, "+c.contradictions+" contradictions</div>"+
-      '<div class="guid">Steal this → '+esc(c.guidance)+"</div></div>";}).join("")
-    :'<div class="card meta">No pattern cleared the bar — the tool refuses to hand you noise.</div>';
+  const rec=d.survivors.filter(c=>c.recommended).slice(0,3);
+  document.getElementById("survivors").innerHTML=rec.length?rec.map(c=>
+    '<div class="card"><div class="pat-title">'+esc(c.statement)+"</div>"+
+    '<div class="bar"><span style="width:'+Math.round(c.robustness*100)+'%"></span></div>'+
+    '<div class="guid">Steal this → '+esc(c.guidance)+"</div></div>").join("")
+    :'<div class="card meta">No strong on-brand pattern this cycle. The tool only shows what holds up.</div>';
   document.getElementById("offbrand").innerHTML=d.offBrand.length?
-    ('<h3>Wins to ignore</h3><p class="lede">These win in the niche but fight your brand. Skip them.</p>'+
-     d.offBrand.map(c=>'<div class="card"><b>'+esc(c.statement)+'</b><div class="guid">'+
-       esc(c.guidance)+"</div></div>").join("")):"";
+    ('<p class="lede" style="margin:6px 0">Wins to ignore (off-brand):</p>'+
+     d.offBrand.map(c=>'<div class="meta" style="margin:4px 0">• '+esc(c.statement)+"</div>").join("")):"";
   document.getElementById("chips").innerHTML=m.topics.slice(0,5).map(tp=>
     '<span class="chip" onclick="pick(\''+esc(tp).replace(/'/g,"")+'\')">'+esc(tp)+"</span>").join("");
   document.getElementById("topic").value=m.topics[0];
   document.getElementById("ledgerRows").innerHTML=d.ledger.map(c=>
     "<tr><td>"+esc(c.feature)+'</td><td class="v-'+c.verdict+'">'+c.verdict+"</td>"+
-    '<td class="r">'+c.robustness.toFixed(2)+'</td><td class="r">'+c.lift.toFixed(2)+
-    '</td><td class="r">'+c.counterexamples+'</td><td class="r">'+c.contradictions+"</td></tr>").join("");
+    '<td class="r">'+c.robustness.toFixed(2)+'</td><td class="r">'+c.lift.toFixed(2)+"</td></tr>").join("");
   if(chart)chart.destroy();
   chart=new Chart(document.getElementById("perfChart"),{type:"bar",
     data:{labels:d.topVideos.map(v=>v.title.slice(0,42)),
