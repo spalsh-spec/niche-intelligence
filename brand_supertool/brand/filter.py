@@ -5,8 +5,7 @@ Two jobs:
   2. anti_pattern_flags(text) -> the off-brand things it tripped
 
 Plus translate_pattern(): turns a (niche-wide) surviving pattern into guidance
-phrased in your voice, e.g. a generic "identity titles win" becomes
-"lead with who the viewer becomes — leaner, freer, sun-fed".
+phrased in your voice.
 """
 from __future__ import annotations
 
@@ -29,7 +28,7 @@ def _keywords(phrases: List[str]) -> set:
 
 def anti_pattern_flags(text: str, brand: BrandProfile) -> List[str]:
     """An anti-pattern fires only when ALL its salient words appear — so an
-    incidental single word ('spam', 'culture') never trips a false alarm."""
+    incidental single word never trips a false alarm."""
     text_l = text.lower()
     flags = []
     for ap in brand.anti_patterns:
@@ -44,46 +43,38 @@ def brand_alignment(text: str, brand: BrandProfile) -> float:
     text_l = text.lower()
     pillar_words = _keywords(brand.pillars)
     pillar_hits = sum(1 for w in pillar_words if w in text_l)
-    # Penalty is phrase-level for consistency with anti_pattern_flags: a lone
-    # incidental keyword shouldn't tank alignment — only a full anti-pattern.
     anti_hits = len(anti_pattern_flags(text, brand))
-
-    pillar_signal = min(pillar_hits / 2.0, 1.0)   # 2+ pillar words = full credit
-    anti_signal = min(anti_hits / 1.0, 1.0)       # any full anti-pattern = penalty
-
+    pillar_signal = min(pillar_hits / 2.0, 1.0)
+    anti_signal = min(anti_hits / 1.0, 1.0)
     score = 0.5 + 0.5 * pillar_signal - 0.6 * anti_signal
     return round(max(0.0, min(1.0, score)), 3)
 
 
-# Feature -> brand-flavored guidance (the "here's YOUR version" translation).
+# Feature -> brand-flavored guidance. Niche-agnostic.
 _BRAND_GUIDANCE = {
-    "title.identity_trigger":
-        "Lead with identity: name who the viewer becomes — leaner, freer, "
-        "sun-fed, unbothered. Aspiration beats information in this niche.",
-    "title.freedom_negation":
-        "Make the freedom explicit — 'no scale', 'no app', 'no gym'. Your "
-        "audience is actively rejecting tracking culture; reward that.",
-    "title.first_person_result":
-        "Frame as a lived experiment ('I ate like a Greek fisherman for 30 "
-        "days'). First-person proof reads as honesty, not a pitch.",
+    "title.identity":
+        "Lead with identity — name who the viewer becomes, not just what they "
+        "learn. Aspiration outperforms information in almost every niche.",
+    "title.first_person":
+        "Frame it as lived proof ('I tried X for 30 days — here's what "
+        "happened'). First-person reads as honesty, not a pitch.",
+    "title.specific_system":
+        "Promise a concrete system or step-by-step method. Specificity signals "
+        "you actually know the path, not just the destination.",
     "title.curiosity_gap":
-        "Open a curiosity gap, but keep it grounded and masculine — 'the "
-        "olive-oil truth nobody in the gym will tell you', never fear-bait.",
-    "thumb.shirtless":
-        "Show the physique earned, not posed — natural light, real setting.",
-    "thumb.sunlit":
-        "Shoot in warm, low sun. Sun energy IS your brand; make the frame feel it.",
-    "thumb.outdoor":
-        "Get outside — coast, mountain, beach. Old-world living, not a gym wall.",
+        "Open a real curiosity gap, but keep it true — 'the truth about X' "
+        "only works when you actually deliver the truth. Never bait.",
     "thumb.face":
-        "Keep a calm, stoic face in frame. Presence over hype.",
+        "Put a calm, expressive face in frame. Human presence beats graphics.",
+    "thumb.clean":
+        "Keep the thumbnail clean and uncluttered — one subject, lots of air. "
+        "Restraint reads as confidence.",
 }
 
-# Patterns that, even if they 'win' niche-wide, you should NOT chase.
 _BRAND_AVOID = {
     "title.fear_clickbait":
-        "Skip it — fear/shouty clickbait violates the grounded, free-spirited "
-        "tone even when it spikes views. Off-brand wins cost trust.",
+        "Skip it — fear/shouty clickbait spikes views but erodes the trust your "
+        "brand compounds on. Off-brand wins cost more than they make.",
     "hook.fear":
         "Avoid fear-based hooks. Open with calm conviction, not panic.",
 }
@@ -98,5 +89,4 @@ def translate_pattern(claim: PatternClaim) -> Tuple[str, bool]:
         return _BRAND_AVOID[claim.feature], False
     if claim.feature in _BRAND_GUIDANCE:
         return _BRAND_GUIDANCE[claim.feature], True
-    return ("Apply this pattern in your own voice — direct, masculine, "
-            "grounded, free.", True)
+    return ("Apply this pattern in your own voice — stay true to your brand.", True)
