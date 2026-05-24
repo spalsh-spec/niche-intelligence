@@ -1,123 +1,119 @@
-"""Content brief generator.
+"""Content brief generator — niche-agnostic.
 
-Input: a topic/idea.
-Output: 3 title options, thumbnail direction, 3-second hook, caption structure
-        — every line grounded in a SURVIVING pattern and filtered through brand.
+Input: a topic + the niche's surviving patterns.
+Output: 3 titles, thumbnail direction, hook, caption structure — every line
+grounded in a SURVIVING pattern and filtered through the niche's brand.
 
-Uses Claude when available; otherwise a deterministic generator seeded by the
-surviving patterns so it always produces something usable and on-brand.
+Uses Claude when available; otherwise a deterministic generator that always
+produces usable, on-brand output.
 """
 from __future__ import annotations
 
 from typing import List
 
-from .. import llm
-from ..models import BrandProfile, ContentBrief, PatternClaim
+from .. import config, llm
+from ..models import ContentBrief, PatternClaim
 from .filter import anti_pattern_flags, brand_alignment, translate_pattern
 
 
 def _survivor_features(survivors: List[PatternClaim]) -> set:
-    return {c.feature for c in survivors
-            if translate_pattern(c)[1]}  # recommended only
+    return {c.feature for c in survivors if translate_pattern(c)[1]}
 
 
-def _heuristic_titles(topic: str, feats: set) -> List[str]:
+def _persona_word(niche: dict) -> str:
+    p = niche.get("persona", "creator")
+    return p if len(p.split()) <= 2 else "creator"
+
+
+def _titles(topic: str, feats: set, niche: dict) -> List[str]:
     t = topic.strip().rstrip(".")
-    titles: List[str] = []
-    if "title.identity_trigger" in feats:
-        titles.append(f"Become the Man Who Mastered {t.title()} (No App, No Scale)")
-    if "title.first_person_result" in feats:
-        titles.append(f"I Tried {t.title()} for 30 Days Eating Like a Greek Fisherman")
-    if "title.freedom_negation" in feats:
-        titles.append(f"{t.title()} — Without the Scale, the App, or the Gym")
+    T = t[0].upper() + t[1:] if t else t
+    persona = _persona_word(niche)
+    pillar = (niche.get("pillars") or ["results"])[0]
+    out: List[str] = []
+    if "title.identity" in feats:
+        out.append(f"Become the Person Who Actually Masters {T}")
+    if "title.first_person" in feats:
+        out.append(f"I Tried {T} for 30 Days — Here's What Actually Happened")
+    if "title.specific_system" in feats:
+        out.append(f"The {T} System That Actually Works (Step by Step)")
     if "title.curiosity_gap" in feats:
-        titles.append(f"The Truth About {t.title()} Nobody in the Gym Will Tell You")
-    # guarantee 3, on-brand defaults
+        out.append(f"The Truth About {T} Nobody Tells You")
     defaults = [
-        f"{t.title()} the Mediterranean Way",
-        f"How I Stay Lean Year-Round: {t.title()} in the Sun",
-        f"The Old-World Approach to {t.title()}",
+        f"{T}: The {pillar.title()} Approach",
+        f"How I Think About {T} as a {persona.title()}",
+        f"The Honest Guide to {T}",
     ]
     for d in defaults:
-        if len(titles) >= 3:
+        if len(out) >= 3:
             break
-        if d not in titles:
-            titles.append(d)
-    return titles[:3]
+        if d not in out:
+            out.append(d)
+    return out[:3]
 
 
-def _heuristic_thumb(feats: set) -> str:
+def _thumb(feats: set) -> str:
     bits = []
-    if "thumb.outdoor" in feats:
-        bits.append("outdoor coast or mountain backdrop")
-    if "thumb.sunlit" in feats:
-        bits.append("warm low-angle sunlight")
-    if "thumb.shirtless" in feats:
-        bits.append("natural earned physique (not posed)")
     if "thumb.face" in feats:
-        bits.append("calm stoic face in frame")
+        bits.append("your face in frame, calm and expressive")
+    if "thumb.clean" in feats:
+        bits.append("one clear subject with lots of empty space")
     if not bits:
-        bits = ["outdoor, sunlit, grounded — old-world living, no gym wall"]
+        bits = ["one clear subject, high contrast, minimal clutter"]
     return "; ".join(bits) + ". Keep text overlay minimal or none."
 
 
 def generate_brief(topic: str, survivors: List[PatternClaim],
-                   brand: BrandProfile) -> ContentBrief:
+                   niche_key: str = config.DEFAULT_NICHE) -> ContentBrief:
+    niche = config.NICHES.get(niche_key, config.NICHES[config.DEFAULT_NICHE])
+    brand = config.get_brand(niche_key)
     grounded = [c.feature for c in survivors if translate_pattern(c)[1]]
 
-    # ---- try Claude first ----
     if llm.available():
         system = (
-            "You are a content strategist for a Mediterranean-lifestyle, "
-            "holistic-fitness creator. Voice: direct, masculine, free-spirited, "
-            "grounded. NEVER reference calorie counting, macro tracking, "
-            "gym-bro aesthetics, hustle culture, or fear-based clickbait."
+            f"You are a content strategist for a {niche['label']} creator. "
+            f"Voice: {', '.join(niche['tone'])}. Pillars: {', '.join(niche['pillars'])}. "
+            f"NEVER use: {', '.join(niche['anti_patterns'])}."
         )
         patt = "\n".join(f"- {c.statement} (robustness {c.robustness})"
                          for c in survivors[:8])
         prompt = (
-            f"Topic: {topic}\n\nProven niche patterns (already validated):\n{patt}\n\n"
-            "Produce a content brief as JSON with keys: titles (array of 3), "
-            "thumbnail_direction (string), hook (string, first 3 seconds), "
-            "caption_structure (string), rationale (string)."
+            f"Topic: {topic}\n\nProven niche patterns (validated):\n{patt}\n\n"
+            "Return JSON with keys: titles (array of 3), thumbnail_direction, "
+            "hook (first 3 seconds), caption_structure, rationale."
         )
         data = llm.complete_json(prompt, system=system, max_tokens=900)
         if isinstance(data, dict) and data.get("titles"):
             brief = ContentBrief(
-                topic=topic,
-                titles=list(data["titles"])[:3],
+                topic=topic, titles=list(data["titles"])[:3],
                 thumbnail_direction=str(data.get("thumbnail_direction", "")),
                 hook=str(data.get("hook", "")),
                 caption_structure=str(data.get("caption_structure", "")),
-                rationale=str(data.get("rationale", "")),
-                grounded_in=grounded,
-            )
+                rationale=str(data.get("rationale", "")), grounded_in=grounded)
             _finalize(brief, brand)
             return brief
 
-    # ---- deterministic fallback ----
     feats = _survivor_features(survivors)
-    titles = _heuristic_titles(topic, feats)
-    hook = ("Everything you were told about " + topic.lower().rstrip(".")
-            + " is upside down. Here's the old-world way.")
+    titles = _titles(topic, feats, niche)
+    hook = (f"Everything you've been told about {topic.lower().rstrip('.')} "
+            "misses the real point. Here's what actually works.")
     caption = (
-        "1) Polarizing one-liner that names the identity.\n"
-        "2) The lived proof (what you did, no tracking).\n"
-        "3) The simple principle the audience can copy today.\n"
-        "4) One line of freedom/aspiration. Invite, don't sell — no pushy CTA."
+        "1) Open with the identity or outcome the viewer wants.\n"
+        "2) Your lived proof or the specific method — be concrete.\n"
+        "3) The one principle they can apply today.\n"
+        "4) A grounded invitation. Invite, don't sell — no pushy CTA."
     )
     rationale = "Grounded in surviving patterns: " + (
         ", ".join(grounded) if grounded else "brand defaults (no patterns survived)")
     brief = ContentBrief(
-        topic=topic, titles=titles, thumbnail_direction=_heuristic_thumb(feats),
+        topic=topic, titles=titles, thumbnail_direction=_thumb(feats),
         hook=hook, caption_structure=caption, rationale=rationale,
-        grounded_in=grounded,
-    )
+        grounded_in=grounded)
     _finalize(brief, brand)
     return brief
 
 
-def _finalize(brief: ContentBrief, brand: BrandProfile) -> None:
+def _finalize(brief: ContentBrief, brand) -> None:
     blob = " ".join(brief.titles) + " " + brief.hook + " " + brief.caption_structure
     brief.brand_alignment = brand_alignment(blob, brand)
     brief.anti_pattern_flags = anti_pattern_flags(blob, brand)
