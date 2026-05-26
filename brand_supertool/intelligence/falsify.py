@@ -40,6 +40,31 @@ def _clamp(x: float, lo: float, hi: float) -> float:
 def evaluate_claim(claim: PatternClaim, videos: List[Video],
                    threshold: float) -> PatternClaim:
     corpus = [v for v in videos if v.platform == claim.platform]
+
+    # BUG FIX: if no corpus videos match the claim's platform the threshold
+    # passed in may be from a different platform slice (or just 0.0).  Recompute
+    # it here so each claim is always judged against its own platform's mean.
+    # This also surfaces the empty-corpus case explicitly rather than silently
+    # falsifying every claim.
+    if not corpus:
+        import warnings
+        warnings.warn(
+            f"[falsify] no videos for platform '{claim.platform}'; "
+            "claim cannot be evaluated — marking as falsified.",
+            RuntimeWarning, stacklevel=2,
+        )
+        claim.counterexamples = 0
+        claim.contradictions = 0
+        claim.falsification_ratio = 1.0
+        claim.robustness = 0.0
+        claim.survived = False
+        claim.verdict = "falsified"
+        return claim
+
+    # Recompute threshold from the claim's own platform slice so evaluate_claim
+    # is safe to call stand-alone (not just from evaluate_all).
+    threshold = _winner_threshold(corpus)
+
     has = [v for v in corpus if v.feature_flags.get(claim.feature)]
     lacks = [v for v in corpus if not v.feature_flags.get(claim.feature)]
     winners = [v for v in corpus if v.performance_score >= threshold]
@@ -88,12 +113,17 @@ def evaluate_claim(claim: PatternClaim, videos: List[Video],
 
 def evaluate_all(claims: List[PatternClaim],
                  videos: List[Video]) -> Tuple[List[PatternClaim], List[PatternClaim]]:
-    """Returns (survivors, all_evaluated). Survivors sorted by robustness."""
+    """Returns (survivors, all_evaluated). Survivors sorted by robustness.
+
+    BUG FIX: previously computed threshold once from claims[0].platform and
+    applied it to all claims — wrong if claims span multiple platforms.
+    Now each evaluate_claim recomputes threshold from its own platform slice.
+    """
     if not claims:
         return [], []
-    threshold = _winner_threshold(
-        [v for v in videos if v.platform == claims[0].platform])
-    evaluated = [evaluate_claim(c, videos, threshold) for c in claims]
+    # threshold is now computed inside evaluate_claim per platform; pass 0.0
+    # as a sentinel (it will be overridden).
+    evaluated = [evaluate_claim(c, videos, 0.0) for c in claims]
     survivors = sorted([c for c in evaluated if c.survived],
                        key=lambda c: c.robustness, reverse=True)
     return survivors, evaluated

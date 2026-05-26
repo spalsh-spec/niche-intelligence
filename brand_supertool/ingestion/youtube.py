@@ -60,6 +60,14 @@ class YouTubeClient:
         return ids[:limit]
 
     def _videos(self, video_ids: List[str], creator: str) -> List[Video]:
+        """Fetch video details in chunks of 50 (API max).
+
+        BUG FIX: previously accessed it['snippet'] with a bare key lookup.
+        YouTube can return items without a 'snippet' key when the video is
+        unavailable, age-restricted, or the quota response is truncated.
+        A KeyError would crash the entire batch.  Now each item is skipped
+        with a warning so the rest of the batch still processes.
+        """
         out: List[Video] = []
         for chunk_start in range(0, len(video_ids), 50):
             chunk = video_ids[chunk_start:chunk_start + 50]
@@ -67,7 +75,16 @@ class YouTubeClient:
                 "videos", part="snippet,statistics", id=",".join(chunk),
             )
             for it in data.get("items", []):
-                snip, stats = it["snippet"], it.get("statistics", {})
+                snip = it.get("snippet")
+                if not snip:
+                    # Unavailable / restricted video — skip gracefully.
+                    import warnings
+                    warnings.warn(
+                        f"[youtube] video {it.get('id', '?')} missing snippet; skipping.",
+                        RuntimeWarning, stacklevel=2,
+                    )
+                    continue
+                stats = it.get("statistics", {})
                 vid = Video(
                     id=it["id"],
                     creator=creator,

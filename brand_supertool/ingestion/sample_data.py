@@ -19,8 +19,6 @@ from typing import List
 from .. import config
 from ..models import Video
 
-_NOW = datetime(2026, 5, 24, tzinfo=timezone.utc)
-
 
 def _title(kind: str, topic: str) -> str:
     t = topic[0].upper() + topic[1:]
@@ -65,6 +63,16 @@ _BASE = {
 
 # 15 slots: each winning pattern appears 3x (clears MIN_SUPPORT), each weak 2x.
 def sample_videos(niche_key: str = config.DEFAULT_NICHE) -> List[Video]:
+    # BUG FIX: _NOW was previously a module-level constant set to a hardcoded
+    # date (2026-05-24).  As real time advances past that date, age_days()
+    # grows unboundedly, views_per_day collapses to near-zero for all videos,
+    # and the fuzzy scoring distribution flattens — eventually breaking
+    # test_score_corpus_orders_winners_high because winners and losers all score
+    # identically low velocity.  Using datetime.now() keeps velocity relative
+    # to 'right now', so the relative differences between video ages remain
+    # stable regardless of when the code runs.
+    now = datetime.now(timezone.utc)
+
     n = config.NICHES.get(niche_key, config.NICHES[config.DEFAULT_NICHE])
     topics, creators = n["topics"], n["creators"]
     rows = []  # [kind, topic, creator, days, scale]
@@ -91,7 +99,7 @@ def sample_videos(niche_key: str = config.DEFAULT_NICHE) -> List[Video]:
             creator=creator, platform="youtube",
             title=_title(kind, topic),
             url=f"https://youtube.com/watch?v={niche_key}_{idx:03d}",
-            published_at=_NOW - timedelta(days=days),
+            published_at=now - timedelta(days=days),
             views=views, likes=int(views * lr), comments=int(views * cr),
             hook=_HOOK[kind],
             thumbnail_features=dict(_THUMB[kind]),

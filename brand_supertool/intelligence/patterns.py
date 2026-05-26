@@ -30,11 +30,23 @@ def mine_patterns(videos: List[Video], platform: str = "youtube") -> List[Patter
 
         avg_with = _mean([v.performance_score for v in has])
         avg_without = _mean([v.performance_score for v in lacks])
-        lift = avg_with / avg_without if avg_without else 0.0
+
+        # BUG FIX: when avg_without==0 the feature is the *only* source of
+        # winning content — that's an infinitely strong positive signal, not
+        # zero lift.  Use a very large finite value so the claim sorts first
+        # and clears MIN_LIFT, while staying representable in JSON.
+        if avg_without == 0.0:
+            lift = float("inf") if avg_with > 0.0 else 1.0
+        else:
+            lift = avg_with / avg_without
+
         direction = "outperform" if lift >= 1 else "underperform"
 
         examples = [v.title for v in sorted(
             has, key=lambda v: v.performance_score, reverse=True)[:3]]
+
+        # Store lift capped at a large sentinel for downstream JSON safety.
+        stored_lift = min(lift, 99.0) if lift != float("inf") else 99.0
 
         claims.append(PatternClaim(
             feature=feature,
@@ -45,7 +57,7 @@ def mine_patterns(videos: List[Video], platform: str = "youtube") -> List[Patter
             population=len(corpus),
             avg_score_with=round(avg_with, 2),
             avg_score_without=round(avg_without, 2),
-            lift=round(lift, 3),
+            lift=round(stored_lift, 3),
             examples=examples,
         ))
 
